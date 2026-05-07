@@ -34,14 +34,15 @@ interface PerformanceRankingProps {
 }
 
 export const PerformanceRanking: React.FC<PerformanceRankingProps> = ({ assets }) => {
-  const [period, setPeriod] = useState<PerformancePeriod>('5D');
+  const [period, setPeriod] = useState<PerformancePeriod>('1D');
 
   const getPerformance = (asset: Asset, p: PerformancePeriod) => {
     switch (p) {
-      case '1D': return asset.change1D;
-      case '5D': return asset.change5D;
-      case '1M': return asset.change1M;
-      case 'YTD': return asset.changeYTD;
+      case '1D': return asset.change1D || 0;
+      case '5D': return asset.change5D || 0; 
+      case '1M': return asset.change1M || 0;
+      case 'YTD': return asset.changeYTD || 0;
+      case 'Total': return asset.averagePrice > 0 ? ((asset.currentPrice - asset.averagePrice) / asset.averagePrice) * 100 : 0;
       default: return 0;
     }
   };
@@ -76,9 +77,9 @@ export const PerformanceRanking: React.FC<PerformanceRankingProps> = ({ assets }
         action={
           <div className="flex space-x-1">
              <PeriodButton p="1D" label="24h" />
-             <PeriodButton p="5D" label="5D" />
-             <PeriodButton p="1M" label="1M" />
-             <PeriodButton p="YTD" label="Ano" />
+             <PeriodButton p="5D" label="Semana" />
+             <PeriodButton p="1M" label="Mês" />
+             <PeriodButton p="Total" label="Total" />
           </div>
         }
       >
@@ -98,9 +99,9 @@ export const PerformanceRanking: React.FC<PerformanceRankingProps> = ({ assets }
         action={
           <div className="flex space-x-1">
              <PeriodButton p="1D" label="24h" />
-             <PeriodButton p="5D" label="5D" />
-             <PeriodButton p="1M" label="1M" />
-             <PeriodButton p="YTD" label="Ano" />
+             <PeriodButton p="5D" label="Semana" />
+             <PeriodButton p="1M" label="Mês" />
+             <PeriodButton p="Total" label="Total" />
           </div>
         }
       >

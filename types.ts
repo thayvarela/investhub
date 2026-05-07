@@ -5,14 +5,15 @@ export interface Asset {
   quantity: number;
   averagePrice: number; // Preço médio de compra
   currentPrice: number; // Preço atual de mercado
+  currency: string; // ISO Code: BRL or USD
   category: string; // Ex: Bolsa BR, Cripto, Exterior
   subCategory: string; // Ex: Bancos, Tech, Commodities
   isManual: boolean;
   // Performance variations (percentages)
-  change1D: number;
-  change5D: number;
-  change1M: number;
-  changeYTD: number;
+  change1D?: number;
+  change5D?: number;
+  change1M?: number;
+  changeYTD?: number;
 }
 
 export interface PortfolioSummary {
@@ -36,7 +37,23 @@ export interface HistoryDataPoint {
 
 export type TimeRange = '1M' | '6M' | '1Y' | 'YTD' | 'ALL';
 
-export type PerformancePeriod = '1D' | '5D' | '1M' | 'YTD';
+export interface PeriodReturn {
+  value: number;
+  percentage: number;
+}
+
+export interface PortfolioReturns {
+  currentValue: number;
+  totalInvested: number;
+  periods: {
+    '1D': PeriodReturn | null;
+    '7D': PeriodReturn | null;
+    '1M': PeriodReturn | null;
+    'Total': PeriodReturn;
+  };
+}
+
+export type PerformancePeriod = '1D' | '5D' | '1M' | 'YTD' | 'Total';
 
 export enum ViewMode {
   DASHBOARD = 'DASHBOARD',

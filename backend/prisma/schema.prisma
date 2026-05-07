@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String             @id @default(uuid())
+  email        String             @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime           @default(now())
+  assets       Asset[]
+  history      PortfolioHistory[]
+  targets      TargetAllocation[]
+}
+
+model Asset {
+  id           String  @id @default(uuid())
+  userId       String
+  ticker       String
+  name         String
+  quantity     Float
+  averagePrice Float
+  currentPrice Float
+  currency     String  @default("BRL")
+  category     String
+  subCategory  String
+  change1D     Float?  @default(0)
+  change5D     Float?  @default(0)
+  change1M     Float?  @default(0)
+  isManual     Boolean
+  updatedAt    DateTime @default(now()) @updatedAt
+  user         User    @relation(fields: [userId], references: [id])
+}
+
+model PortfolioHistory {
+  id            String   @id @default(uuid())
+  userId        String
+  date          DateTime @default(now())
+  totalValue    Float
+  totalInvested Float
+  user          User     @relation(fields: [userId], references: [id])
+}
+
+model TargetAllocation {
+  id               String @id @default(uuid())
+  userId           String
+  segmentKey       String
+  targetPercentage Float
+  user             User   @relation(fields: [userId], references: [id])
+}
