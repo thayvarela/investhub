@@ -4,12 +4,14 @@ import { Card } from './ui/Card';
 import { PortfolioPieChart, HistoryAreaChart } from './Charts';
 import { AssetTable } from './AssetTable';
 import { PerformanceRanking } from './PerformanceRanking';
+import * as rebalanceService from '../services/rebalanceService';
 
 interface DashboardProps {
   assets: Asset[];
   history: HistoryDataPoint[];
   quotes: { [key: string]: number };
   returns: PortfolioReturns | null;
+  targets?: rebalanceService.BackendTarget[];
   onUpdateAsset: (asset: Asset) => void;
   onDeleteAsset: (id: string) => void;
 }
@@ -75,7 +77,7 @@ const ReturnPeriodCard: React.FC<{
   );
 };
 
-export const Dashboard: React.FC<DashboardProps> = ({ assets, history, quotes, returns, onUpdateAsset, onDeleteAsset }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ assets, history, quotes, returns, targets, onUpdateAsset, onDeleteAsset }) => {
   const [selectedSegment, setSelectedSegment] = useState<string | null>(null);
   const [timeRange, setTimeRange] = useState<TimeRange>('1Y');
 
@@ -310,13 +312,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets, history, quotes, r
           <button
             onClick={() => {
               const usdRate = quotes.USDBRL || 1;
-              const headers = ['Ticker', 'Nome', 'Categoria', 'Sub-Categoria', 'Moeda', 'Qtd', 'Preço Médio', 'Preço Atual', 'Total (BRL)', 'Variação %'];
+              const portfolioTotal = assets.reduce((acc, a) => acc + (a.quantity * a.currentPrice * (a.currency === 'USD' ? usdRate : 1)), 0);
+
+              const headers = ['Ticker', 'Nome', 'Categoria', 'Sub-Categoria', 'Moeda', 'Qtd', 'Preço Médio', 'Preço Atual', 'Total (BRL)', 'Variação %', '% Atual', '% Alvo'];
               const rows = filteredAssets.map(a => {
                 const rate = a.currency === 'USD' ? usdRate : 1;
                 const total = a.quantity * a.currentPrice * rate;
                 const variation = a.averagePrice > 0
                   ? ((a.currentPrice - a.averagePrice) / a.averagePrice * 100).toFixed(2)
                   : '0.00';
+                
+                const percentualAtual = portfolioTotal > 0 ? ((total / portfolioTotal) * 100).toFixed(2) + '%' : '0.00%';
+                
+                let percentualAlvo = 'N/A';
+                if (targets && targets.length > 0) {
+                  const catKey = a.category;
+                  const subKey = `${a.category}:${a.subCategory}`;
+                  const assetKey = `${a.category}:${a.subCategory}:${a.ticker}`;
+                  
+                  const wCat = (targets.find(t => t.segmentKey === catKey)?.targetPercentage || 0) / 100;
+                  const wSub = (targets.find(t => t.segmentKey === subKey)?.targetPercentage || 0) / 100;
+                  const wAsset = (targets.find(t => t.segmentKey === assetKey)?.targetPercentage || 0) / 100;
+                  
+                  percentualAlvo = (wCat * wSub * wAsset * 100).toFixed(2) + '%';
+                }
+
                 return [
                   a.ticker,
                   a.name,
@@ -327,7 +347,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ assets, history, quotes, r
                   a.averagePrice.toFixed(2),
                   a.currentPrice.toFixed(2),
                   total.toFixed(2),
-                  variation
+                  variation,
+                  percentualAtual,
+                  percentualAlvo
                 ].map(v => `"${v}"`).join(',');
               });
               const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');

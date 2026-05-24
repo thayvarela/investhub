@@ -12,6 +12,7 @@ interface RebalancingDashboardProps {
 
 export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ assets, quotes, targets, onBatchUpdateAssets }) => {
   const [contribution, setContribution] = useState<number>(0);
+  const [displayCurrency, setDisplayCurrency] = useState<'BRL' | 'USD'>('BRL');
   const [isRebalanceMode, setIsRebalanceMode] = useState<boolean>(false);
   const [segmentWeights, setSegmentWeights] = useState<TargetAllocation>({});
   const [subSegmentWeights, setSubSegmentWeights] = useState<TargetAllocation>({});
@@ -233,9 +234,23 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
   };
 
   const usdRate = quotes.USDBRL || 1;
+
+  const getAssetRate = (assetCurrency: string) => {
+    if (assetCurrency === displayCurrency) return 1;
+    return displayCurrency === 'BRL' ? usdRate : 1 / usdRate;
+  };
+
+  const formatCurrency = (val: number, maxFractionDigits?: number) => {
+    return new Intl.NumberFormat(displayCurrency === 'USD' ? 'en-US' : 'pt-BR', { 
+      style: 'currency', 
+      currency: displayCurrency,
+      ...(maxFractionDigits !== undefined ? { maximumFractionDigits: maxFractionDigits } : {})
+    }).format(val);
+  };
+
   const simulationData = useMemo(() => {
     const currentTotal = assets.reduce((acc, a) => {
-      const rate = a.currency === 'USD' ? usdRate : 1;
+      const rate = getAssetRate(a.currency);
       return acc + (a.quantity * a.currentPrice * rate);
     }, 0);
     const projectedTotal = currentTotal + (contribution || 0);
@@ -252,7 +267,7 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
       const wSub = (subSegmentWeights[subKey] || 0) / 100;
       const wAsset = (assetWeights[assetKey] || 0) / 100;
 
-      const rate = asset.currency === 'USD' ? usdRate : 1;
+      const rate = getAssetRate(asset.currency);
       const currentValue = asset.quantity * asset.currentPrice * rate;
 
       if (!categories[catKey]) categories[catKey] = { current: 0, targetPercent: wCat, subs: {} };
@@ -282,7 +297,8 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
               currentPercent: modeProjectedTotal > 0 ? a.currentValue / modeProjectedTotal : 0,
               targetValue: a.targetValue,
               targetPercent: a.globalTargetPercent,
-              actionAmount: a.targetValue - a.currentValue
+              actionAmount: a.targetValue - a.currentValue,
+              smartActionAmount: a.targetValue - a.currentValue
             });
           });
         });
@@ -290,7 +306,7 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
       return finalResults.sort((a, b) => b.actionAmount - a.actionAmount);
     }
 
-    // Helper for top-down greedy distribution
+    // Helper for top-down proportional distribution
     function distribute(amount: number, nodes: { key: string, target: number, current: number, weight: number }[]) {
       const nodesWithDeficit = nodes.map(n => ({
         ...n,
@@ -299,18 +315,21 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
       }));
 
       let remaining = amount;
-      const sorted = [...nodesWithDeficit].sort((a, b) => b.deficit - a.deficit);
+      const totalDeficit = nodesWithDeficit.reduce((sum, n) => sum + n.deficit, 0);
 
-      for (const node of sorted) {
-        if (remaining <= 0) break;
-        if (node.deficit > 0) {
-          const alloc = Math.min(node.deficit, remaining);
-          node.allocated += alloc;
-          remaining -= alloc;
+      if (totalDeficit > 0) {
+        for (const node of nodesWithDeficit) {
+          if (node.deficit > 0) {
+            const alloc = amount <= totalDeficit
+              ? amount * (node.deficit / totalDeficit)
+              : node.deficit;
+            node.allocated += alloc;
+            remaining -= alloc;
+          }
         }
       }
 
-      if (remaining > 0) {
+      if (remaining > 0.01) {
         const totalWeight = nodesWithDeficit.reduce((sum, n) => sum + n.weight, 0);
         for (const node of nodesWithDeficit) {
           const w = totalWeight > 0 ? node.weight / totalWeight : 1 / nodesWithDeficit.length;
@@ -374,30 +393,71 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
       });
     });
 
+    // 3. Smart Distribution (Water-filling)
+    if (contribution > 0) {
+      let low = 0;
+      let high = projectedTotal * 2;
+      for (let i = 0; i < 50; i++) {
+        const mid = (low + high) / 2;
+        let needed = 0;
+        finalResults.forEach(r => {
+          if (r.targetPercent > 0) {
+            needed += Math.max(0, mid * r.targetPercent - r.currentValue);
+          }
+        });
+        if (needed > contribution) high = mid;
+        else low = mid;
+      }
+      finalResults.forEach(r => {
+        if (r.targetPercent > 0) {
+          r.smartActionAmount = Math.max(0, low * r.targetPercent - r.currentValue);
+        } else {
+          r.smartActionAmount = 0;
+        }
+      });
+    } else {
+      let maxRatio = 0;
+      finalResults.forEach(r => {
+        if (r.targetPercent > 0) {
+          const ratio = r.currentValue / r.targetPercent;
+          if (ratio > maxRatio) maxRatio = ratio;
+        }
+      });
+      finalResults.forEach(r => {
+        if (r.targetPercent > 0) {
+          r.smartActionAmount = maxRatio * r.targetPercent - r.currentValue;
+        } else {
+          r.smartActionAmount = 0;
+        }
+      });
+    }
+
     return finalResults.sort((a, b) => b.actionAmount - a.actionAmount);
-  }, [assets, contribution, segmentWeights, subSegmentWeights, assetWeights, usdRate, isRebalanceMode]);
+  }, [assets, contribution, segmentWeights, subSegmentWeights, assetWeights, usdRate, displayCurrency, isRebalanceMode]);
 
   const totalPortfolioValue = useMemo(() => {
     return assets.reduce((acc, a) => {
-      const rate = a.currency === 'USD' ? usdRate : 1;
+      const rate = getAssetRate(a.currency);
       return acc + (a.quantity * a.currentPrice * rate);
     }, 0);
-  }, [assets, usdRate]);
+  }, [assets, usdRate, displayCurrency]);
 
   const groupedSimData = useMemo(() => {
     const groups: any = {};
     simulationData.forEach(sim => {
       const asset = assets.find(a => a.ticker === sim.ticker);
       if (!asset) return;
-      if (!groups[asset.category]) groups[asset.category] = { currentValue: 0, targetValue: 0, actionAmount: 0, subs: {} };
+      if (!groups[asset.category]) groups[asset.category] = { currentValue: 0, targetValue: 0, actionAmount: 0, smartActionAmount: 0, subs: {} };
       groups[asset.category].currentValue += sim.currentValue;
       groups[asset.category].targetValue += sim.targetValue;
       groups[asset.category].actionAmount += sim.actionAmount;
+      groups[asset.category].smartActionAmount += sim.smartActionAmount || 0;
 
-      if (!groups[asset.category].subs[asset.subCategory]) groups[asset.category].subs[asset.subCategory] = { currentValue: 0, targetValue: 0, actionAmount: 0, assets: [] };
+      if (!groups[asset.category].subs[asset.subCategory]) groups[asset.category].subs[asset.subCategory] = { currentValue: 0, targetValue: 0, actionAmount: 0, smartActionAmount: 0, assets: [] };
       groups[asset.category].subs[asset.subCategory].currentValue += sim.currentValue;
       groups[asset.category].subs[asset.subCategory].targetValue += sim.targetValue;
       groups[asset.category].subs[asset.subCategory].actionAmount += sim.actionAmount;
+      groups[asset.category].subs[asset.subCategory].smartActionAmount += sim.smartActionAmount || 0;
 
       sim.overweight = (sim.currentPercent - sim.targetPercent) * 100;
       groups[asset.category].subs[asset.subCategory].assets.push(sim);
@@ -670,25 +730,41 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
         <Card className="bg-gradient-to-br from-dark-card to-slate-900 border-brand-500/30">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-semibold text-white">Simulação</h3>
-            <div className="flex bg-slate-800 rounded-lg p-1">
-              <button 
-                onClick={() => setIsRebalanceMode(false)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${!isRebalanceMode ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                Aportar
-              </button>
-              <button 
-                onClick={() => setIsRebalanceMode(true)}
-                className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${isRebalanceMode ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
-              >
-                Rebalancear
-              </button>
+            <div className="flex items-center space-x-4">
+              <div className="flex bg-slate-800 rounded-lg p-1 border border-slate-700">
+                <button
+                  onClick={() => setDisplayCurrency('BRL')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${displayCurrency === 'BRL' ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  BRL
+                </button>
+                <button
+                  onClick={() => setDisplayCurrency('USD')}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${displayCurrency === 'USD' ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  USD
+                </button>
+              </div>
+              <div className="flex bg-slate-800 rounded-lg p-1">
+                <button 
+                  onClick={() => setIsRebalanceMode(false)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${!isRebalanceMode ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  Aportar
+                </button>
+                <button 
+                  onClick={() => setIsRebalanceMode(true)}
+                  className={`px-3 py-1 text-xs font-bold rounded-md transition-all ${isRebalanceMode ? 'bg-brand-600 text-white shadow' : 'text-slate-400 hover:text-white'}`}
+                >
+                  Rebalancear
+                </button>
+              </div>
             </div>
           </div>
           <div className="mb-6">
-            <label className="block text-xs text-slate-400 mb-1">{isRebalanceMode ? 'Aporte Opcional (R$)' : 'Novo Aporte (R$)'}</label>
+            <label className="block text-xs text-slate-400 mb-1">{isRebalanceMode ? `Aporte Opcional (${displayCurrency})` : `Novo Aporte (${displayCurrency})`}</label>
             <div className="relative">
-              <span className="absolute left-3 top-2 text-slate-500">R$</span>
+              <span className="absolute left-3 top-2 text-slate-500">{displayCurrency === 'USD' ? 'US$' : 'R$'}</span>
               <input
                 type="number"
                 value={contribution}
@@ -702,11 +778,11 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
           <div className="space-y-3">
             <div className="flex justify-between text-sm border-b border-slate-700 pb-2">
               <span className="text-slate-400">Patrimônio Atual</span>
-              <span className="text-white font-medium">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(assets.reduce((a, b) => a + b.quantity * b.currentPrice * (b.currency === 'USD' ? usdRate : 1), 0))}</span>
+              <span className="text-white font-medium">{formatCurrency(totalPortfolioValue)}</span>
             </div>
             <div className="flex justify-between text-sm border-b border-slate-700 pb-2">
               <span className="text-slate-400">Patrimônio Projetado</span>
-              <span className="text-emerald-400 font-bold">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(assets.reduce((a, b) => a + b.quantity * b.currentPrice * (b.currency === 'USD' ? usdRate : 1), 0) + contribution)}</span>
+              <span className="text-emerald-400 font-bold">{formatCurrency(totalPortfolioValue + contribution)}</span>
             </div>
           </div>
         </Card>
@@ -728,10 +804,9 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
             <div className="w-full text-left text-sm">
               <div className="flex bg-slate-800 text-xs text-slate-400 sticky top-0 px-4 py-2 font-bold z-10">
                 <div className="flex-1">Categoria / Ativo</div>
-                <div className="w-24 text-right">Atual (R$)</div>
-                <div className="w-24 text-right">Target (R$)</div>
+                <div className="w-24 text-right">Atual</div>
+                <div className="w-24 text-right">Target</div>
                 <div className="w-24 text-right">Sugestão</div>
-                <div className="w-24 text-center">Prioridade</div>
               </div>
               <div className="divide-y divide-slate-700">
                 {Object.entries(groupedSimData).map(([cat, catData]: any) => (
@@ -744,19 +819,18 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
                           <span className="uppercase text-xs tracking-wider border-l-2 border-brand-500 pl-2">{cat}</span>
                         </div>
                         <div className="w-24 text-right text-[11px] text-slate-400">
-                           {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(catData.currentValue)}
+                           {formatCurrency(catData.currentValue)}
                         </div>
                         <div className="w-24 text-right text-[11px] text-slate-400">
-                           {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(catData.targetValue)}
+                           {formatCurrency(catData.targetValue)}
                         </div>
                         <div className="w-24 text-right">
                           {catData.actionAmount > 0.01 ? (
-                            <span className="text-emerald-400 text-xs font-bold">+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(catData.actionAmount)}</span>
+                            <span className="text-emerald-400 text-xs font-bold">+ {formatCurrency(catData.actionAmount)}</span>
                           ) : catData.actionAmount < -0.01 ? (
-                            <span className="text-red-400 text-xs font-bold">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(catData.actionAmount))}</span>
+                            <span className="text-red-400 text-xs font-bold">- {formatCurrency(Math.abs(catData.actionAmount))}</span>
                           ) : <span className="text-slate-600 text-[10px]">-</span>}
                         </div>
-                        <div className="w-24"></div>
                       </div>
                       {Math.abs(catData.overweight) > 5 && (
                         <div className="mx-4 mb-1 flex items-center gap-2 px-2 py-1 bg-amber-900/30 border border-amber-700/50 rounded text-[10px]">
@@ -782,19 +856,18 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
                                <span className="text-xs font-medium text-slate-400">{sub}</span>
                             </div>
                             <div className="w-24 text-right text-[10px] text-slate-500">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subData.currentValue)}
+                              {formatCurrency(subData.currentValue)}
                             </div>
                             <div className="w-24 text-right text-[10px] text-slate-500">
-                              {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subData.targetValue)}
+                              {formatCurrency(subData.targetValue)}
                             </div>
                             <div className="w-24 text-right">
                               {subData.actionAmount > 0.01 ? (
-                                <span className="text-emerald-500/80 text-[10px] font-semibold">+ {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(subData.actionAmount)}</span>
+                                <span className="text-emerald-500/80 text-[10px] font-semibold">+ {formatCurrency(subData.actionAmount)}</span>
                               ) : subData.actionAmount < -0.01 ? (
-                                <span className="text-red-500/80 text-[10px] font-semibold">- {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(Math.abs(subData.actionAmount))}</span>
+                                <span className="text-red-500/80 text-[10px] font-semibold">- {formatCurrency(Math.abs(subData.actionAmount))}</span>
                               ) : <span className="text-slate-600 text-[10px]">-</span>}
                             </div>
-                            <div className="w-24"></div>
                           </div>
                           {Math.abs(subData.overweight) > 5 && (
                             <div className="mx-4 mb-1 flex items-center gap-1.5 px-2 py-0.5 bg-amber-900/20 border border-amber-800/40 rounded text-[9px]">
@@ -812,47 +885,32 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
                         <div className="divide-y divide-slate-700/30">
                           {subData.assets.map((sim: any) => (
                             <div key={sim.ticker} className="flex px-4 py-2 ml-4 hover:bg-slate-800/30 transition-colors items-center">
-                              <div className="flex-1">
+                              <div className="flex-1 flex items-center gap-2">
                                 <div className="font-bold text-slate-200 text-xs">{sim.ticker}</div>
+                                {Math.abs(sim.overweight) > 5 && (
+                                  <span className="text-amber-500 text-[10px] font-bold" title="Desvio > 5%">⚠</span>
+                                )}
                               </div>
                               <div className="w-24 text-right">
-                                <div className="text-slate-400 font-medium text-[11px]">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.currentValue)}</div>
+                                <div className="text-slate-400 font-medium text-[11px]">{formatCurrency(sim.currentValue)}</div>
                               </div>
                               <div className="w-24 text-right">
                                 <div className="text-brand-400 font-medium text-[11px]">{(sim.targetPercent * 100).toFixed(1)}%</div>
                                 <div className="text-[10px] text-slate-500">
-                                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(sim.targetValue)}
+                                  {formatCurrency(sim.targetValue)}
                                 </div>
                               </div>
                               <div className="w-24 text-right flex justify-end">
                                 {sim.actionAmount > 0.01 ? (
                                   <span className="inline-flex justify-center items-center px-1.5 py-0.5 bg-emerald-900/50 text-emerald-400 rounded border border-emerald-800 font-bold text-[10px]">
-                                    + {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(sim.actionAmount)}
+                                    + {formatCurrency(sim.actionAmount, 0)}
                                   </span>
                                 ) : sim.actionAmount < -0.01 ? (
                                   <span className="inline-flex justify-center items-center px-1.5 py-0.5 bg-red-900/50 text-red-400 rounded border border-red-800 font-bold text-[10px]">
-                                    - {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(Math.abs(sim.actionAmount))}
+                                    - {formatCurrency(Math.abs(sim.actionAmount), 0)}
                                   </span>
                                 ) : (
                                   <span className="text-slate-600 text-[10px]">Aguardar</span>
-                                )}
-                              </div>
-                              <div className="w-24 flex justify-center items-center">
-                                {priorityMap[sim.ticker] && priorityMap[sim.ticker].deficit > 0 ? (
-                                  <div className={`relative group inline-flex items-center justify-center w-6 h-6 rounded-full text-[10px] font-bold border cursor-help transition-all ${
-                                    priorityMap[sim.ticker].level === 'alta' ? 'bg-red-500/20 text-red-400 border-red-500/50 shadow-[0_0_8px_rgba(239,68,68,0.2)]' :
-                                    priorityMap[sim.ticker].level === 'media' ? 'bg-amber-500/20 text-amber-400 border-amber-500/50' :
-                                    priorityMap[sim.ticker].level === 'baixa' ? 'bg-slate-700/50 text-slate-300 border-slate-600/50' :
-                                    'bg-slate-800 text-slate-600 border-slate-700/50'
-                                  }`}>
-                                    {priorityMap[sim.ticker].rank}º
-                                    {/* Tooltip */}
-                                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-max px-2 py-1 bg-slate-800 border border-slate-700 text-slate-200 text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity z-20 shadow-xl">
-                                      Faltam {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(priorityMap[sim.ticker].deficit)}
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-[10px] text-slate-600">—</span>
                                 )}
                               </div>
                             </div>

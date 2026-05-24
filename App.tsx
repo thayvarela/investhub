@@ -243,7 +243,7 @@ const App: React.FC = () => {
             />
 
             {activeTab === 'overview' ? (
-              <Dashboard assets={assets} history={history} quotes={quotes} returns={returns} onUpdateAsset={handleUpdateAsset} onDeleteAsset={handleDeleteAsset} />
+              <Dashboard assets={assets} history={history} quotes={quotes} returns={returns} targets={targets} onUpdateAsset={handleUpdateAsset} onDeleteAsset={handleDeleteAsset} />
             ) : (
               <RebalancingDashboard
                 assets={assets}

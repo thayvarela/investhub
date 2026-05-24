@@ -307,111 +307,17 @@ export const fetchAssetPrice = async (ticker: string): Promise<PriceData | null>
             return await fetchCryptoPrice(coinId, cleanTicker.length > 5 ? (cleanTicker === 'BITCOIN' ? 'BTC' : (cleanTicker.includes('ETHER') ? 'ETH' : cleanTicker)) : cleanTicker);
         }
 
-        const token = process.env.BRAPI_TOKEN;
-        // Construct URL for logging (masking token if printed, but okay here internally)
-        logToFile(`Fetching price for: ${cleanTicker}`);
-
-        const response = await axios.get(`${BRAPI_BASE_URL}/quote/${cleanTicker}`, {
-            params: {
-                range: '1mo',
-                interval: '1d',
-                token: token, // Free tier token
-            }
-        });
-
-        // logToFile(`Response for ${ticker}: ${JSON.stringify(response.data)}`);
-
-        const results = response.data.results;
-        if (results && results.length > 0) {
-            const result = results[0];
-            let price = result.regularMarketPrice;
-            const currency = result.currency || 'BRL';
-
-            // We NO LONGER convert to BRL here. We return the original price and currency.
-            if (currency === 'USD') {
-                logToFile(`[SERVICE] Detected USD asset. Returning original price: ${price} USD`);
-            }
-
-            // Artificial "AI" Logic for Categories
-            let category = 'Manual';
-            let subCategory = 'Geral';
-
-            // 1. Check Hardcoded Map (Highest Precision)
-            if (SECTOR_MAP[cleanTicker]) {
-                const mapping = SECTOR_MAP[cleanTicker];
-                category = mapping.category;
-                subCategory = mapping.subCategory;
-            }
-            // 2. Fallback Heuristics
-            else if (results[0].coinImageUrl || cleanTicker.includes('BTC') || cleanTicker.includes('USD')) {
-                category = 'Cripto';
-                subCategory = 'Coin';
-            } else if (result.currency === 'USD') {
-                category = 'Exterior';
-                subCategory = 'Ações/ETFs';
-            } else {
-                // Generic Bolsa BR heuristics
-                category = 'Bolsa BR';
-
-                if (cleanTicker.endsWith('11')) {
-                    subCategory = 'FIIs / ETFs';
-                } else if (cleanTicker.endsWith('3') || cleanTicker.endsWith('4') || cleanTicker.endsWith('5') || cleanTicker.endsWith('6')) {
-                    subCategory = 'Ações';
-                } else if (cleanTicker.endsWith('34')) {
-                    subCategory = 'BDRs';
-                } else {
-                    subCategory = 'Outros';
-                }
-            }
-
-            let change5D = 0;
-            let change1M = 0;
-            if (result.historicalDataPrice && result.historicalDataPrice.length > 0) {
-                const hist = result.historicalDataPrice;
-                const idx5D = Math.max(0, hist.length - 6);
-                const price5D = hist[idx5D]?.close;
-                if (price5D) change5D = ((price - price5D) / price5D) * 100;
-
-                const price1M = hist[0]?.close;
-                if (price1M) change1M = ((price - price1M) / price1M) * 100;
-            }
-
-            logToFile(`Found price for ${cleanTicker}: ${price} ${currency} (${category}/${subCategory})`);
-            return {
-                ticker: result.symbol,
-                currentPrice: price,
-                currency: currency,
-                updatedAt: new Date(result.regularMarketTime) || new Date(),
-                suggestedCategory: category,
-                suggestedSubCategory: subCategory,
-                change1D: result.regularMarketChangePercent || 0,
-                change5D: change5D,
-                change1M: change1M
-            };
-        }
-
-        logToFile(`No results found in Brapi response for ${cleanTicker}. Trying Yahoo Finance fallback...`);
-        // Fallback to Yahoo Finance for international tickers
+        // TEMPORARY: Bypass Brapi due to rate limits and use Yahoo Finance directly
+        logToFile(`[SERVICE] Bypassing Brapi temporarily due to limits. Fetching price for: ${cleanTicker} via Yahoo Finance`);
         const yahooResult = await fetchYahooPrice(cleanTicker);
         if (yahooResult) {
             return yahooResult;
         }
-        logToFile(`[FALLBACK] No results from Yahoo Finance either for ${cleanTicker}`);
+        logToFile(`[FALLBACK] No results from Yahoo Finance for ${cleanTicker}`);
         return null;
+
     } catch (error: any) { // Explicitly type error as 'any' or 'unknown' for broader catch
-        logToFile(`Error fetching ${cleanTicker} from Brapi: ${error.message}. Trying Yahoo Finance fallback...`);
-        if (axios.isAxiosError(error) && error.response) {
-            logToFile(`Axios Response: ${JSON.stringify(error.response.data)}`);
-        }
-        // Fallback to Yahoo Finance when Brapi errors out
-        try {
-            const yahooResult = await fetchYahooPrice(cleanTicker);
-            if (yahooResult) {
-                return yahooResult;
-            }
-        } catch (yahooError: any) {
-            logToFile(`[FALLBACK] Yahoo Finance also failed for ${cleanTicker}: ${yahooError.message}`);
-        }
+        logToFile(`Error fetching ${cleanTicker}: ${error.message}`);
         console.error(`Error fetching price for ${cleanTicker}:`, error);
         return null;
     }
@@ -419,40 +325,42 @@ export const fetchAssetPrice = async (ticker: string): Promise<PriceData | null>
 
 export const searchSymbol = async (query: string): Promise<any[]> => {
     try {
-        const token = process.env.BRAPI_TOKEN;
-        const response = await axios.get(`${BRAPI_BASE_URL}/quote/list`, {
-            params: {
-                search: query,
-                token: token
-            }
+        // TEMPORARY: Bypass Brapi search and use Yahoo Finance autocomplete
+        const response = await axios.get(`https://query2.finance.yahoo.com/v1/finance/search`, {
+            params: { q: query },
+            headers: { 'User-Agent': 'AssetFlow/1.0' }
         });
 
-        if (response.data && response.data.stocks) {
-            let results = response.data.stocks.map((s: any) => ({
-                ticker: s.stock,
-                name: s.name,
-                currency: s.stock.includes('US') || s.type === 'stock' ? 'USD' : 'BRL' // Heuristic
-            }));
-
-            // Force exact match to the top if not already there
-            const exactMatch = query.toUpperCase();
-
-            // Crypto special handling for search
-            const popularCrypto = ['BTC', 'ETH', 'XRP', 'SOL', 'ADA', 'DOT', 'DOGE', 'MATIC', 'AVAX', 'LINK', 'UNI', 'LTC', 'SHIB', 'BNB'];
-            if (popularCrypto.includes(exactMatch) && !results.find((r: any) => r.ticker === exactMatch)) {
-                results = [{ ticker: exactMatch, name: `Cripto: ${exactMatch}`, currency: 'USD' }, ...results];
-            } else {
-                const exists = results.find((r: any) => r.ticker === exactMatch);
-                if (!exists) {
-                    // If it's a short ticker likely to be US, or if we want to be safe, add it as a possibility
-                    // Brapi sometimes doesn't return exact matches in 'search' if they aren't 'popular' enough in their ranking
-                    results = [{ ticker: exactMatch, name: `Ticker: ${exactMatch}`, currency: exactMatch.length <= 3 ? 'USD' : 'BRL' }, ...results];
-                }
-            }
-
-            return results;
+        let results: any[] = [];
+        if (response.data && response.data.quotes) {
+            results = response.data.quotes
+                .filter((q: any) => q.quoteType === 'EQUITY' || q.quoteType === 'ETF' || q.quoteType === 'CRYPTOCURRENCY' || q.quoteType === 'MUTUALFUND')
+                .map((q: any) => {
+                    let ticker = q.symbol;
+                    // Remove .SA suffix for Brazilian stocks to keep UI clean
+                    if (ticker.endsWith('.SA')) {
+                        ticker = ticker.replace('.SA', '');
+                    }
+                    return {
+                        ticker: ticker,
+                        name: q.shortname || q.longname || ticker,
+                        currency: q.exchange === 'SAO' ? 'BRL' : 'USD'
+                    };
+                });
         }
-        return [];
+
+        const exactMatch = query.toUpperCase();
+        const popularCrypto = ['BTC', 'ETH', 'XRP', 'SOL', 'ADA', 'DOT', 'DOGE', 'MATIC', 'AVAX', 'LINK', 'UNI', 'LTC', 'SHIB', 'BNB'];
+        if (popularCrypto.includes(exactMatch) && !results.find((r: any) => r.ticker === exactMatch)) {
+            results = [{ ticker: exactMatch, name: `Cripto: ${exactMatch}`, currency: 'USD' }, ...results];
+        } else {
+            const exists = results.find((r: any) => r.ticker === exactMatch);
+            if (!exists) {
+                results = [{ ticker: exactMatch, name: `Ticker: ${exactMatch}`, currency: exactMatch.length <= 3 ? 'USD' : 'BRL' }, ...results];
+            }
+        }
+
+        return results;
     } catch (error) {
         console.error("Search Symbol Error", error);
         return [];

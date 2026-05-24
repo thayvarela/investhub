@@ -80,4 +80,5 @@ export interface SimulationResult {
   targetValue: number;
   targetPercent: number;
   actionAmount: number; // Positive = Buy, Negative = Sell (usually 0 if contribution covers it)
+  smartActionAmount?: number; // Ideal mathematically optimal distribution
 }
