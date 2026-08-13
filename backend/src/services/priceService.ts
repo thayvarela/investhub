@@ -92,7 +92,21 @@ export const takePortfolioSnapshot = async () => {
                              userId: user.id,
                              totalValue: totalVal,
                              totalInvested: totalInv,
-                             // date defaults to now()
+                             assetSnapshots: {
+                                 create: user.assets.map(a => ({
+                                     ticker: a.ticker,
+                                     name: a.name,
+                                     quantity: a.quantity,
+                                     averagePrice: a.averagePrice,
+                                     currentPrice: a.currentPrice,
+                                     currency: a.currency,
+                                     category: a.category,
+                                     subCategory: a.subCategory,
+                                     change1D: a.change1D || 0,
+                                     change5D: a.change5D || 0,
+                                     change1M: a.change1M || 0
+                                 }))
+                             }
                          }
                      });
                  }

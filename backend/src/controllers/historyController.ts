@@ -97,3 +97,76 @@ export const getReturns = async (req: Request, res: Response) => {
         return res.status(500).json({ error: 'Failed to compute returns' });
     }
 };
+
+export const exportHistory = async (req: Request, res: Response) => {
+    try {
+        const userId = req.user!.id;
+        const usdRate = await fetchUSDRate();
+
+        // Get all history snapshots with asset details, ordered by date desc
+        const history = await prisma.portfolioHistory.findMany({
+            where: { userId },
+            include: {
+                assetSnapshots: true
+            },
+            orderBy: { date: 'desc' },
+        });
+
+        // Generate CSV content
+        const headers = ['Data', 'Ticker', 'Nome', 'Categoria', 'Sub-Categoria', 'Moeda', 'Quantidade', 'Preço Médio', 'Preço Atual', 'Total (BRL)', 'Variação %'];
+        const rows: string[] = [];
+
+        for (const snap of history) {
+            const dateStr = new Date(snap.date).toISOString().slice(0, 10); // YYYY-MM-DD
+            
+            if (snap.assetSnapshots && snap.assetSnapshots.length > 0) {
+                for (const asset of snap.assetSnapshots) {
+                    const rate = asset.currency === 'USD' ? usdRate : 1;
+                    const total = asset.quantity * asset.currentPrice * rate;
+                    const variation = asset.averagePrice > 0
+                        ? ((asset.currentPrice - asset.averagePrice) / asset.averagePrice * 100).toFixed(2)
+                        : '0.00';
+                    
+                    rows.push([
+                        dateStr,
+                        asset.ticker,
+                        asset.name,
+                        asset.category,
+                        asset.subCategory,
+                        asset.currency,
+                        asset.quantity.toString(),
+                        asset.averagePrice.toFixed(2),
+                        asset.currentPrice.toFixed(2),
+                        total.toFixed(2),
+                        variation
+                    ].map(v => `"${v}"`).join(','));
+                }
+            } else {
+                // Fallback for old history without asset details
+                rows.push([
+                    dateStr,
+                    'PORTFOLIO_TOTAL',
+                    'Total do Portfólio (Histórico)',
+                    'Geral',
+                    'Geral',
+                    'BRL',
+                    '1',
+                    snap.totalInvested.toFixed(2),
+                    snap.totalValue.toFixed(2),
+                    snap.totalValue.toFixed(2),
+                    snap.totalInvested > 0 ? (((snap.totalValue - snap.totalInvested) / snap.totalInvested) * 100).toFixed(2) : '0.00'
+                ].map(v => `"${v}"`).join(','));
+            }
+        }
+
+        const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+        
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=historico_carteira_${new Date().toISOString().slice(0, 10)}.csv`);
+        return res.status(200).send(csvContent);
+    } catch (error) {
+        console.error('Error exporting history:', error);
+        return res.status(500).json({ error: 'Failed to export history' });
+    }
+};
+

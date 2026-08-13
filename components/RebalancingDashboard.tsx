@@ -307,7 +307,7 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
     }
 
     // Helper for top-down proportional distribution
-    function distribute(amount: number, nodes: { key: string, target: number, current: number, weight: number }[]) {
+    function distribute<T extends { key: string, target: number, current: number, weight: number }>(amount: number, nodes: T[]) {
       const nodesWithDeficit = nodes.map(n => ({
         ...n,
         deficit: Math.max(0, n.target - n.current),
@@ -530,6 +530,95 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
     return map;
   }, [groupedSimData]);
 
+  const deviationData = useMemo(() => {
+    const usdRate = quotes.USDBRL || 1;
+    const portfolioTotal = assets.reduce((acc, a) => {
+      const rate = a.currency === 'USD' ? usdRate : 1;
+      return acc + (a.quantity * a.currentPrice * rate);
+    }, 0);
+    if (portfolioTotal <= 0) return null;
+
+    // Compute current values per segment and sub-segment
+    const segValues: Record<string, number> = {};
+    const subValues: Record<string, number> = {};
+
+    assets.forEach(a => {
+      const rate = a.currency === 'USD' ? usdRate : 1;
+      const val = a.quantity * a.currentPrice * rate;
+      segValues[a.category] = (segValues[a.category] || 0) + val;
+      const subKey = `${a.category}:${a.subCategory}`;
+      subValues[subKey] = (subValues[subKey] || 0) + val;
+    });
+
+    type DeviationRow = {
+      name: string;
+      level: 'segment' | 'sub';
+      parentSegment?: string;
+      currentPct: number;
+      targetPct: number;
+      deviationPct: number;
+      currentValue: number;
+      targetValue: number;
+      deviationValue: number;
+    };
+
+    const rows: DeviationRow[] = [];
+
+    // Segments
+    const allSegments = new Set([...Object.keys(segValues), ...Object.keys(segmentWeights)]);
+    allSegments.forEach(seg => {
+      const currentVal = segValues[seg] || 0;
+      const currentPct = (currentVal / portfolioTotal) * 100;
+      const targetPct = segmentWeights[seg] || 0;
+      const targetVal = portfolioTotal * (targetPct / 100);
+      rows.push({
+        name: seg,
+        level: 'segment',
+        currentPct,
+        targetPct,
+        deviationPct: currentPct - targetPct,
+        currentValue: currentVal,
+        targetValue: targetVal,
+        deviationValue: currentVal - targetVal
+      });
+    });
+
+    // Sub-segments
+    const allSubs = new Set([...Object.keys(subValues), ...Object.keys(subSegmentWeights)]);
+    allSubs.forEach(subKey => {
+      const parts = subKey.split(':');
+      if (parts.length !== 2) return;
+      const [seg, sub] = parts;
+      const segTarget = segmentWeights[seg] || 0;
+      const subTarget = subSegmentWeights[subKey] || 0;
+      const effectiveTargetPct = (segTarget * subTarget) / 100; // global percentage
+      const currentVal = subValues[subKey] || 0;
+      const currentPct = (currentVal / portfolioTotal) * 100;
+      const targetVal = portfolioTotal * (effectiveTargetPct / 100);
+      rows.push({
+        name: sub,
+        level: 'sub',
+        parentSegment: seg,
+        currentPct,
+        targetPct: effectiveTargetPct,
+        deviationPct: currentPct - effectiveTargetPct,
+        currentValue: currentVal,
+        targetValue: targetVal,
+        deviationValue: currentVal - targetVal
+      });
+    });
+
+    // Filter out rows where current allocation is 0 (no allocation)
+    const filteredRows = rows.filter(row => row.currentPct >= 0.01);
+
+    // Sort by absolute deviation descending
+    filteredRows.sort((a, b) => Math.abs(b.deviationPct) - Math.abs(a.deviationPct));
+
+    const maxAbsDev = filteredRows.length > 0 ? Math.max(...filteredRows.map(r => Math.abs(r.deviationPct)), 1) : 1;
+
+    return { rows: filteredRows, maxAbsDev, portfolioTotal };
+  }, [assets, quotes, segmentWeights, subSegmentWeights]);
+
   const totalSegmentWeight = (Object.values(segmentWeights) as number[]).reduce((a, b) => a + b, 0);
 
   return (
@@ -723,6 +812,105 @@ export const RebalancingDashboard: React.FC<RebalancingDashboardProps> = ({ asse
             </span>
           </div>
         </Card>
+
+        {/* Allocation Deviations Card */}
+        {deviationData && deviationData.rows.length > 0 && (
+          <Card
+            title="Desvios de Alocação"
+            action={
+              <span className="text-xs text-slate-500">
+                Ordenado pelo maior desvio (desconsiderando zerados)
+              </span>
+            }
+          >
+            <div className="space-y-1">
+              {/* Header */}
+              <div className="grid grid-cols-12 gap-2 text-[10px] uppercase tracking-wider text-slate-500 font-semibold px-2 py-1.5 border-b border-slate-700/50">
+                <div className="col-span-4">Segmento</div>
+                <div className="col-span-2 text-right">Atual</div>
+                <div className="col-span-2 text-right">Alvo</div>
+                <div className="col-span-4 text-right">Desvio</div>
+              </div>
+
+              <div className="max-h-[350px] overflow-y-auto space-y-1 pr-1">
+                {deviationData.rows.map((row, idx) => {
+                  const isOver = row.deviationPct > 0;
+                  const absDevPct = Math.abs(row.deviationPct);
+                  const severity = absDevPct >= 5 ? 'high' : absDevPct >= 2 ? 'medium' : 'low';
+
+                  const textColorClass = isOver
+                    ? severity === 'high' ? 'text-amber-400' : severity === 'medium' ? 'text-amber-300' : 'text-amber-200/60'
+                    : severity === 'high' ? 'text-blue-400' : severity === 'medium' ? 'text-blue-300' : 'text-blue-200/60';
+
+                  const severityDot = severity === 'high' ? '🔴' : severity === 'medium' ? '🟡' : '🟢';
+
+                  const formatCurr = (val: number) => new Intl.NumberFormat(displayCurrency === 'USD' ? 'en-US' : 'pt-BR', {
+                    style: 'currency',
+                    currency: displayCurrency,
+                    maximumFractionDigits: 0
+                  }).format(val * getAssetRate('BRL'));
+
+                  return (
+                    <div
+                      key={`${row.level}-${row.name}-${row.parentSegment || ''}`}
+                      className={`grid grid-cols-12 gap-2 items-center px-2 py-2 rounded transition-colors hover:bg-slate-800/40 ${
+                        idx % 2 === 0 ? 'bg-slate-800/15' : ''
+                      }`}
+                    >
+                      {/* Name */}
+                      <div className="col-span-4 min-w-0">
+                        <p className={`text-xs font-medium truncate ${row.level === 'segment' ? 'text-white font-semibold' : 'text-slate-300'}`}>
+                          {row.level === 'sub' && <span className="text-slate-500 mr-1">└</span>}
+                          {row.name}
+                        </p>
+                        {row.level === 'sub' && (
+                          <p className="text-[9px] text-slate-500 truncate pl-2.5">{row.parentSegment}</p>
+                        )}
+                      </div>
+
+                      {/* Current % */}
+                      <div className="col-span-2 text-right">
+                        <span className="text-xs text-slate-300 font-mono">{row.currentPct.toFixed(1)}%</span>
+                      </div>
+
+                      {/* Target % */}
+                      <div className="col-span-2 text-right">
+                        <span className="text-xs text-slate-500 font-mono">{row.targetPct.toFixed(1)}%</span>
+                      </div>
+
+                      {/* Deviation % & BRL */}
+                      <div className="col-span-4 text-right flex flex-col justify-center items-end">
+                        <span className={`text-xs font-bold font-mono ${textColorClass}`}>
+                          {isOver ? '+' : ''}{row.deviationPct.toFixed(1)}%
+                        </span>
+                        <span className={`text-[9px] font-mono ${textColorClass} opacity-80`}>
+                          {isOver ? '+' : ''}{formatCurr(row.deviationValue)}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Legend */}
+            <div className="mt-4 pt-3 border-t border-slate-700/50 flex flex-wrap gap-3 text-[9px] text-slate-500">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-amber-500 inline-block"></span>
+                <span>Acima</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-blue-500 inline-block"></span>
+                <span>Abaixo</span>
+              </div>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <span>🔴 {'>'}5%</span>
+                <span>🟡 2-5%</span>
+                <span>🟢 {'<'}2%</span>
+              </div>
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* Right Column: Simulation */}

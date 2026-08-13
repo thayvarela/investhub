@@ -38,12 +38,30 @@ model Asset {
 }
 
 model PortfolioHistory {
-  id            String   @id @default(uuid())
-  userId        String
-  date          DateTime @default(now())
-  totalValue    Float
-  totalInvested Float
-  user          User     @relation(fields: [userId], references: [id])
+  id             String          @id @default(uuid())
+  userId         String
+  date           DateTime        @default(now())
+  totalValue     Float
+  totalInvested  Float
+  user           User            @relation(fields: [userId], references: [id])
+  assetSnapshots AssetSnapshot[]
+}
+
+model AssetSnapshot {
+  id                 String           @id @default(uuid())
+  portfolioHistoryId String
+  ticker             String
+  name               String
+  quantity           Float
+  averagePrice       Float
+  currentPrice       Float
+  currency           String           @default("BRL")
+  category           String
+  subCategory        String
+  change1D           Float?           @default(0)
+  change5D           Float?           @default(0)
+  change1M           Float?           @default(0)
+  portfolioHistory   PortfolioHistory @relation(fields: [portfolioHistoryId], references: [id], onDelete: Cascade)
 }
 
 model TargetAllocation {
