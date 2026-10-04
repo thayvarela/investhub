@@ -5,234 +5,194 @@
   
   **A plataforma inteligente de gestão de patrimônio, controle de ativos e rebalanceamento dinâmico.**
   
-  [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-blue.svg)](https://nodejs.org)
+  [![Node.js Version](https://img.shields.io/badge/node-%3E%3D20.0.0-blue.svg)](https://nodejs.org)
   [![Vite](https://img.shields.io/badge/Vite-6.x-646CFF.svg)](https://vite.dev)
   [![React](https://img.shields.io/badge/React-19.x-61DAFB.svg)](https://react.dev)
   [![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748.svg)](https://prisma.io)
-  [![Docker](https://img.shields.io/badge/Docker-Supported-2496ED.svg)](https://www.docker.com)
+  [![Database](https://img.shields.io/badge/PostgreSQL-Neon_Cloud-00E599.svg)](https://neon.tech)
 </div>
 
 ---
 
 ## 📋 Sobre o Projeto
 
-O **InvestHub** (AssetFlow Intelligence) é uma solução moderna e robusta para investidores organizarem seu portfólio de investimentos. O sistema calcula a distribuição de ativos por categorias (Ações, FIIs, Cripto, Exterior, etc.), monitora variações de mercado em tempo real e fornece recomendações matemáticas ideais de **rebalanceamento de carteira** baseadas nas metas estipuladas pelo próprio usuário.
+O **InvestHub** é uma solução completa para investidores gerenciarem carteiras de investimentos com rebalanceamento matemático de precisão. O sistema calcula a distribuição por categorias (Ações, FIIs, Cripto, Exterior, etc.), monitora variações em tempo real e emite recomendações automáticas de aportes ideais.
 
-O projeto é dividido em duas partes principais:
-1. **Frontend (Root):** Aplicação Single Page em React, TypeScript e Vite, com gráficos dinâmicos de alta performance (Recharts), tabelas interativas e suporte a consultas diretas ao modelo Gemini da Google AI.
-2. **Backend (`/backend`):** API RESTful desenvolvida em Node.js com Express e TypeScript, utilizando o Prisma ORM para acesso seguro ao banco de dados relacional PostgreSQL.
-
----
-
-## 🛠️ Tecnologias Principais
-
-### Frontend (Raiz do Projeto)
-*   **React 19 & TypeScript**: Interface de usuário moderna e fortemente tipada.
-*   **Vite**: Build system ultra-rápido para desenvolvimento.
-*   **Recharts**: Visualização gráfica interativa da evolução patrimonial e alocação.
-*   **TailwindCSS**: Estilização responsiva e elegante com temas escuros premium.
-*   **Google Gemini SDK (`@google/genai`)**: Integração com inteligência artificial para análises preditivas.
-
-### Backend (Pasta `/backend`)
-*   **Node.js & Express**: Servidor web rápido para a API REST.
-*   **TypeScript**: Código de backend seguro e de fácil manutenção.
-*   **Prisma ORM**: Modelagem de dados intuitiva e migrações estruturadas.
-*   **PostgreSQL**: Banco de dados relacional extremamente estável e robusto.
-*   **Docker & Docker Compose**: Orquestração simplificada do banco de dados local.
-*   **Yahoo Finance Fallback Integration**: Atualização em lote e buscas inteligentes de cotações nacionais (B3) e internacionais.
+* **Frontend:** Single Page Application moderna em React 19, TypeScript, Vite, TailwindCSS e Recharts.
+* **Backend:** API REST em Node.js, Express, TypeScript e Prisma ORM.
+* **Banco de Dados na Nuvem:** Hospedado no **Neon PostgreSQL** (serverless na nuvem AWS São Paulo). **Você NÃO precisa instalar Docker localmente!** Todos os dados já estão salvos e sincronizados na nuvem em tempo real.
 
 ---
 
-## 🚀 Como Configurar e Rodar o InvestHub
+## 💻 Guia Definitivo: Do Zero ao WSL 2 em Qualquer Computador
 
-Siga este passo a passo detalhado para instalar o ambiente e rodar o InvestHub no seu ou em qualquer outro computador do zero.
+Se você acabou de formatar sua máquina ou deseja rodar o projeto em um computador novo (com Windows 10/11), siga este guia passo a passo para deixar seu ambiente 100% isolado, rápido e sem poluir o Windows.
 
-### 📋 Pré-requisitos
-Antes de começar, certifique-se de ter instalado em seu computador:
-1.  **[Git](https://git-scm.com/)**: Para clonar o repositório.
-2.  **[Node.js](https://nodejs.org/)** (Versão 18 ou superior): O ambiente de execução JavaScript.
-3.  **[Docker Desktop](https://www.docker.com/products/docker-desktop/)**: Para subir o banco de dados PostgreSQL instantaneamente (fortemente recomendado).
+> *(Se estiver no Linux nativo ou macOS, pule o Passo 1 e vá direto para o Passo 2)*.
 
 ---
 
-### 1️⃣ Passo 1: Clonar o Repositório
-Abra o seu terminal (PowerShell, CMD ou terminal do Linux/macOS) e execute:
+### 1️⃣ Passo 1: Habilitar o WSL 2 (Ambiente Linux Isolado no Windows)
+
+1. No Windows, abra o menu Iniciar, digite **PowerShell**, clique com o botão direito e selecione **"Executar como Administrador"**.
+2. Digite o seguinte comando e aperte Enter:
+   ```powershell
+   wsl --install
+   ```
+3. Aguarde o download do Ubuntu. Quando terminar, **reinicie o computador**.
+4. Ao reiniciar o Windows, o terminal do Ubuntu abrirá automaticamente para a configuração inicial:
+   * **Enter new UNIX username:** escolha um nome de usuário (ex: `thayn`).
+   * **New password:** digite uma senha (os caracteres não aparecem na tela, é normal) e repita.
+
+---
+
+### 2️⃣ Passo 2: Instalar Node.js e Ferramentas no Ubuntu
+
+No terminal aberto do **Ubuntu**, vamos instalar o NVM (gerenciador de versões do Node) e o Node.js LTS:
+
+1. **Instale o NVM:**
+   ```bash
+   curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+   ```
+
+2. **Recarregue o terminal para ativar o NVM:**
+   ```bash
+   source ~/.bashrc
+   ```
+
+3. **Instale o Node.js LTS mais recente:**
+   ```bash
+   nvm install --lts
+   ```
+
+4. **Crie os links globais no Linux** *(Evita que o terminal tente chamar o CMD do Windows acidentalmente)*:
+   ```bash
+   sudo ln -sf $(which node) /usr/local/bin/node
+   sudo ln -sf $(which npm) /usr/local/bin/npm
+   sudo ln -sf $(which npx) /usr/local/bin/npx
+   ```
+
+5. **Configure o seu Git:**
+   ```bash
+   git config --global user.name "Seu Nome"
+   git config --global user.email "seu_email@exemplo.com"
+   ```
+
+---
+
+### 3️⃣ Passo 3: Clonar o Projeto na Pasta Nativa do Linux
+
+> ⚠️ **ATENÇÃO - REGRA DE OURO:**  
+> Nunca clone projetos de desenvolvimento dentro de `/mnt/c/` (disco do Windows), pois o sistema de arquivos compartilhado fica muito lento.  
+> Sempre clone dentro da **pasta pessoal do Linux (`~`)** para ter 100% da velocidade do SSD/NVMe!
+
+No terminal do Ubuntu:
 ```bash
+cd ~
+mkdir -p projetos && cd projetos
 git clone https://github.com/thayvarela/investhub.git
 cd investhub
 ```
 
 ---
 
-### 2️⃣ Passo 2: Configurar e Iniciar o Backend
-A API do backend gerencia o login de usuários, as cotações, os ativos cadastrados e as metas de rebalanceamento.
+### 4️⃣ Passo 4: Configurar Variáveis de Ambiente e Dependências
 
-1. **Navegue até a pasta do backend:**
-   ```bash
-   cd backend
-   ```
+O projeto já inclui arquivos de exemplo prontos (`.env.example` e `.env.local.example`).
 
-2. **Instale as dependências do servidor:**
-   ```bash
-   npm install
-   ```
-
-3. **Configurar as Variáveis de Ambiente:**
-   Crie um arquivo chamado `.env` na raiz da pasta `backend` com a seguinte estrutura:
-   ```env
-   PORT=3001
-   DATABASE_URL="postgresql://postgres:postgres@localhost:5432/investhub?schema=public"
-   JWT_SECRET="insira_uma_chave_secreta_super_segura_aqui"
-   ```
-
-4. **Iniciar o Banco de Dados (PostgreSQL via Docker):**
-   Com o **Docker Desktop** aberto e rodando no seu computador, execute no terminal:
-   ```bash
-   docker compose up -d
-   ```
-   > 💡 *Esse comando baixa e inicia um container PostgreSQL em segundo plano com as credenciais especificadas no arquivo `docker-compose.yml`.*
-
-5. **Criar a Estrutura de Tabelas (Migrações Prisma):**
-   Com o banco de dados rodando, crie as tabelas e gere o client do Prisma rodando:
-   ```bash
-   npx prisma migrate dev --name init
-   ```
-   *(Opcional) Popule o banco com dados de teste iniciais (Seed) rodando:*
-   ```bash
-   npx prisma db seed
-   ```
-
-6. **Iniciar o Servidor de Desenvolvimento:**
-   ```bash
-   npm run dev
-   ```
-   O servidor backend estará ativo no endereço: **`http://localhost:3001`**
-
----
-
-### 3️⃣ Passo 3: Configurar e Iniciar o Frontend
-Agora vamos rodar a interface visual da aplicação.
-
-1. **Abra uma nova janela do terminal na pasta raiz do projeto (`investhub`):**
-   *(Se estiver no terminal anterior, volte um nível usando `cd ..`)*
-
-2. **Instale as dependências do frontend:**
-   ```bash
-   npm install
-   ```
-
-3. **Configurar as Variáveis de Ambiente do Frontend:**
-   Crie um arquivo chamado `.env.local` na raiz do projeto com o seguinte conteúdo:
-   ```env
-   VITE_API_URL="http://localhost:3001"
-   GEMINI_API_KEY="SUA_CHAVE_API_DO_GEMINI_AQUI"
-   ```
-   > 💡 *A variável `VITE_API_URL` aponta para a API que acabamos de subir. `GEMINI_API_KEY` é opcional e serve para liberar análises com inteligência artificial direto no painel.*
-
-4. **Iniciar a Aplicação Web:**
-   ```bash
-   npm run dev
-   ```
-   A plataforma estará disponível para acesso no navegador no endereço: **`http://localhost:5173`** (ou a porta exibida no terminal).
-
----
-
-## 🗄️ Como Compartilhar o Banco de Dados entre Computadores?
-
-Uma dúvida comum ao rodar o sistema em mais de um computador é: **"Como posso ter as mesmas informações, ativos e cadastros sincronizados em todos os computadores?"**
-
-Como por padrão o banco de dados roda localmente na sua máquina (`localhost`), os computadores não compartilham dados automaticamente. Abaixo estão as **três melhores soluções** organizadas por facilidade e caso de uso:
-
----
-
-### 🌐 Opção A: Banco de Dados na Nuvem (Recomendado & Mais Fácil)
-A forma mais prática e robusta de compartilhar os dados em tempo real é mover o banco de dados PostgreSQL do Docker local para um serviço de nuvem gratuito. Assim, qualquer computador conectado à internet acessará os mesmos dados.
-
-#### Serviços Recomendados (Gratuitos):
-1. **[Neon (neon.tech)](https://neon.tech/)**: Banco PostgreSQL "serverless" extremamente rápido. O plano gratuito é mais do que suficiente para o InvestHub.
-2. **[Supabase (supabase.com)](https://supabase.com/)**: Plataforma Open Source que disponibiliza um banco PostgreSQL completo na nuvem com plano gratuito generoso.
-
-#### Passo a Passo para Configurar:
-1. Crie uma conta gratuita em um dos serviços acima (ex: Neon.tech).
-2. Crie um novo projeto/banco de dados chamado `investhub`.
-3. O serviço gerará uma string de conexão (Connection String), que se parece com isso:
-   `postgresql://neondb_owner:senha_segura@ep-nome-servidor.us-east-2.aws.neon.tech/investhub?sslmode=require`
-4. **No computador principal e nos demais computadores:**
-   Edite o arquivo `backend/.env` e substitua a variável `DATABASE_URL` pela string gerada na nuvem:
-   ```env
-   DATABASE_URL="postgresql://neondb_owner:senha_segura@ep-nome-servidor.us-east-2.aws.neon.tech/investhub?sslmode=require"
-   ```
-5. Rode o comando de migração para estruturar o banco na nuvem pela primeira vez (pode ser feito de qualquer uma das máquinas):
-   ```bash
-   npx prisma migrate dev
-   ```
-6. **Pronto!** A partir de agora, qualquer alteração, compra de ativo ou cadastro feito em qualquer computador atualizará o banco de dados na nuvem instantaneamente, mantendo as informações idênticas em tempo real!
-
----
-
-### 📶 Opção B: Compartilhamento via Rede Local (Mesmo Wi-Fi)
-Se os computadores estiverem conectados na **mesma rede Wi-Fi/Internet local**, você pode manter o banco rodando no Docker de uma única máquina (que funcionará como "Servidor") e conectar as outras máquinas a ela.
-
-#### Passo a Passo para Configurar:
-1. **No computador principal (Servidor):**
-   * Descubra o IP local da máquina na rede. No Windows, abra o PowerShell e digite `ipconfig` (procure pelo campo *Endereço IPv4*, ex: `192.168.1.15`).
-   * Certifique-se de que o Docker PostgreSQL está rodando normalmente nesta máquina.
-   * Certifique-se de liberar a porta `5432` no Firewall do Windows para conexões vindas da rede local.
-
-2. **Nos outros computadores (Clientes):**
-   * No arquivo `backend/.env`, substitua `localhost` pelo IP local do computador principal:
-     ```env
-     DATABASE_URL="postgresql://postgres:postgres@192.168.1.15:5432/investhub?schema=public"
-     ```
-   * *Opcional:* Se você subir a API Backend no computador principal também, as outras máquinas podem rodar apenas o Frontend apontando a variável `VITE_API_URL` para o IP do computador principal (ex: `VITE_API_URL="http://192.168.1.15:3001"`).
-
----
-
-### 💾 Opção C: Backup e Restauração Manual (Sincronização offline)
-Se você não deseja expor o banco na internet e os computadores não compartilham a mesma rede, você pode exportar os dados de um computador e importar no outro periodicamente usando arquivos `.sql`.
-
-#### Como Exportar (Computador A):
-No terminal da máquina que tem os dados atualizados, execute o comando do Postgres para gerar um arquivo de backup:
+#### A) Configurar o Backend:
 ```bash
-docker exec -t backend-db-1 pg_dump -U postgres -d investhub > backup_investhub.sql
+cd backend
+cp .env.example .env
+npm install
+npx prisma generate
 ```
-*(Nota: Substitua `backend-db-1` pelo nome exato do container Docker do seu banco, que você pode conferir com o comando `docker ps`)*.
+*(O arquivo `.env` já virá configurado com a URL do seu banco na nuvem Neon! Se precisar alterar no futuro, basta editar com `nano .env`)*.
 
-#### Como Importar (Computador B):
-Envie o arquivo `backup_investhub.sql` para o computador de destino. Com o Docker do banco rodando no computador B, execute:
+#### B) Configurar o Frontend:
 ```bash
-docker exec -i backend-db-1 psql -U postgres -d investhub < backup_investhub.sql
+cd ..
+cp .env.local.example .env.local
+npm install
 ```
 
 ---
 
-## 🛠️ Comandos Úteis do Docker
+### 5️⃣ Passo 5: Como Abrir no VS Code e Rodar o Projeto
 
-Aqui estão os comandos seguros para gerenciar o container do banco local sem risco de perda de dados:
+#### Abrir no VS Code com extensão WSL:
+Dentro da pasta `~/projetos/investhub`, digite:
+```bash
+code .
+```
+O VS Code do Windows abrirá conectado diretamente ao Ubuntu! Se for a primeira vez, clique em **"Instalar"** na notificação da extensão oficial *WSL*.
 
-*   **Ligar o banco de dados (segundo plano):**
-    ```bash
-    docker compose up -d
-    ```
-*   **Parar o banco temporariamente (salva os dados no volume):**
-    ```bash
-    docker compose stop
-    ```
-*   **Reiniciar o banco:**
-    ```bash
-    docker compose restart
-    ```
-*   ⚠️ **CUIDADO (Apagar dados):**
-    ```bash
-    docker compose down -v
-    ```
-    *Evite rodar o comando com a flag `-v`, pois ela removerá o volume do Docker onde seus ativos e usuários estão armazenados fisicamente.*
+#### Rodar o Projeto (Backend + Frontend juntos):
+Criamos um script que inicia os dois servidores automaticamente com apenas um comando:
+
+```bash
+./start.sh
+```
+
+*(Se preferir rodar em dois terminais separados)*:
+* **Terminal 1 (Backend):** `cd backend && npm run dev`
+* **Terminal 2 (Frontend):** `npm run dev`
 
 ---
 
-## 🤝 Contribuição e Suporte
+### 6️⃣ Passo 6: Acessar a Aplicação
 
-Caso encontre algum erro de conexão ou configuração ao subir o projeto em outros dispositivos, verifique:
-1. Se as portas `3001` (backend) e `5432` (postgres) não estão sendo usadas por outras aplicações.
-2. Se o Docker Desktop está ativo.
-3. Se os arquivos `.env` (backend) e `.env.local` (frontend) foram criados e preenchidos corretamente nas pastas correspondentes.
+Abra qualquer navegador comum no Windows (Google Chrome, Microsoft Edge, etc.) e acesse:
+
+👉 **`http://localhost:5173`** *(ou a porta informada pelo Vite no terminal)*
+
+Pronto! A aplicação conectará à API e ao banco de dados Neon na nuvem, trazendo instantaneamente todos os seus ativos, históricos e gráficos atualizados!
+
+---
+
+### 🛡️ O "Botão de Pânico" do WSL (Como formatar ou resetar tudo)
+
+A maior vantagem de programar no WSL 2 é que o seu Windows continua puro e rápido. Se um dia você quiser resetar todo o ambiente de desenvolvimento e começar do zero absoluto sem formatar o PC:
+
+1. Abra o PowerShell no Windows e digite:
+   ```powershell
+   wsl --unregister Ubuntu
+   ```
+   *(Em 3 segundos, todo o Linux com Node, bibliotecas e pastas de desenvolvimento é apagado sem afetar nada do seu Windows)*.
+2. Para reinstalar zerado de fábrica:
+   ```powershell
+   wsl --install Ubuntu
+   ```
+
+---
+
+## 🗄️ Estrutura de Variáveis de Ambiente
+
+### Backend (`backend/.env`)
+```env
+PORT=3001
+DATABASE_URL="postgresql://investhubdb_owner:npg_nQaI8ELyoG1R@ep-falling-cherry-b6q0n4zw-pooler.c-2.sa-east-1.aws.neon.tech/investhubdb?sslmode=require"
+JWT_SECRET="sua_chave_secreta_super_segura"
+PLUGGY_CLIENT_ID=""
+PLUGGY_CLIENT_SECRET=""
+BRAPI_TOKEN=""
+```
+
+### Frontend (`.env.local`)
+```env
+VITE_API_URL="http://localhost:3001"
+GEMINI_API_KEY=""
+```
+
+---
+
+## 🤝 Dúvidas e Soluções Comuns
+
+* **"CMD.EXE foi iniciado tendo o caminho acima como pasta atual" ou "'vite' não é reconhecido":**  
+  Esse erro ocorre quando o terminal do Linux tenta chamar o Node do Windows. Para resolver de vez, rode no terminal do Ubuntu:
+  ```bash
+  sudo ln -sf $(which node) /usr/local/bin/node
+  sudo ln -sf $(which npm) /usr/local/bin/npm
+  ```
+* **"Erro de conexão com o banco de dados":**  
+  Verifique se o seu computador está conectado à internet, pois o banco de dados está hospedado no Neon Cloud.

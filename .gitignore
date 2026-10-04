@@ -16,6 +16,8 @@ dist-ssr
 .env.*
 backend/.env
 backend/.env.*
+!*.example
+!**/*.example
 *backup*.json
 
 # Editor directories and files
